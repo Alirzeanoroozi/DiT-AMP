@@ -1,0 +1,6 @@
+model,n_scored,hydramp_amp_mean,hydramp_amp_std,hydramp_mic_mean,hydramp_mic_std,path
+dit_amp,932,0.9748218849526824,0.13699088702038606,0.7952907880674404,0.3649756403869087,/scratch/anoroozi25/DiT-AMP/eval/hydramp_results/dit_amp_sequences_with_hydramp.csv
+ampgan,50000,0.6313560760362085,0.41264838793718733,0.31625098242671607,0.4348934952379331,/scratch/anoroozi25/DiT-AMP/eval/hydramp_results/ampgan_sequences_with_hydramp.csv
+pepcvae,50000,0.5155268104197768,0.42155295422754274,0.2051656959474415,0.3788098805717055,/scratch/anoroozi25/DiT-AMP/eval/hydramp_results/pepcvae_sequences_with_hydramp.csv
+hydramp,50000,0.781808776798368,0.36456012929060555,0.512012280386105,0.48089986366173193,/scratch/anoroozi25/DiT-AMP/eval/hydramp_results/hydramp_sequences_with_hydramp.csv
+ampdiffusion,22029,0.8146964958018862,0.3335875229772262,0.456047877807331,0.47576112741644627,/scratch/anoroozi25/DiT-AMP/eval/hydramp_results/ampdiffusion_sequences_with_hydramp.csv

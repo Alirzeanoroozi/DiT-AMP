@@ -1,5 +1,5 @@
 import numpy as np
-from macrel.macrel_features import get_sequence_features
+from src.macrel.macrel_features import get_sequence_features
 import gzip
 import onnxruntime as rt
 from pathlib import Path

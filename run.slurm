@@ -12,12 +12,7 @@
 
 # Initialise environment and modules
 CONDA_BASE=$(conda info --base)
-# source ${CONDA_BASE}/bin/activate comp
-source ${CONDA_BASE}/bin/activate amplify
+source ${CONDA_BASE}/bin/activate comp
 export LD_LIBRARY_PATH=${CONDA_BASE}/lib
 
-# nvidia-smi
-
-AMPlify -s genbio/ampgan_sequences.fasta
-# AMPlify -s ampdiffusion_results/genbio/hydramp_sequences.fasta
-AMPlify -s genbio/pepcvae_sequences.fasta
+python src/amp.py

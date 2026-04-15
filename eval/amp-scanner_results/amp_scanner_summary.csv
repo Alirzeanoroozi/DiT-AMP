@@ -1,0 +1,6 @@
+model,n_scored,probability_mean,probability_std,amp_rate_mean,amp_rate_std,path
+dit_amp,983,0.9946613428280774,0.04366977802490089,0.9979654120040692,0.045060497640590225,/scratch/anoroozi25/DiT-AMP/eval/amp-scanner/dit_amp_sequences.csv
+ampgan,41537,0.6311171557888149,0.43157155280879894,0.6325204034956785,0.48211859812430236,/scratch/anoroozi25/DiT-AMP/eval/amp-scanner/ampgan_sequences.csv
+pepcvae,48110,0.5045733984618582,0.4240405443105559,0.49544793182290586,0.49997927824592,/scratch/anoroozi25/DiT-AMP/eval/amp-scanner/pepcvae_sequences.csv
+hydramp,47892,0.6373191681282887,0.41965822992887963,0.6392299340182076,0.48022393263277247,/scratch/anoroozi25/DiT-AMP/eval/amp-scanner/hydramp_sequences.csv
+ampdiffusion,50000,0.6953353419999999,0.41908532160688117,0.69476,0.4605090036036212,/scratch/anoroozi25/DiT-AMP/eval/amp-scanner/ampdiffusion_sequences.csv

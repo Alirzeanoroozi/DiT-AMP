@@ -15,9 +15,10 @@ CONDA_BASE=$(conda info --base)
 source ${CONDA_BASE}/bin/activate amplify
 export LD_LIBRARY_PATH=${CONDA_BASE}/lib
 
-# nvidia-smi
+AMPlify -s genbio/ampgan_sequences.fasta
+AMPlify -s genbio/pepcvae_sequences.fasta
 
-shopt -s nullglob
-for f in genbio/*.{fa,fasta}; do
-  AMPlify -s "$f"
-done
+# shopt -s nullglob
+# for f in genbio/*.{fa,fasta}; do
+#   AMPlify -s "$f"
+# done

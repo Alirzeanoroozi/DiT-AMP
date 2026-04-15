@@ -1,32 +1,20 @@
 import numpy as np
 import torch
 import glob
+import csv
+from pathlib import Path
+import matplotlib.pyplot as plt
+from Bio import SeqIO
 from utils import make_vocab, onehot_encoding
-import pandas as pd
 
-pathogen_list = [
-	'A. baumannii ATCC 19606',
-	'E. coli ATCC 11775',
-	'E. coli AIC221',
-	'E. coli AIC222',
-	'K. pneumoniae ATCC 13883',
-	'P. aeruginosa PA01',
-	'P. aeruginosa PA14',
-	'S. aureus ATCC 12600',
-	'S. aureus (ATCC BAA-1556) - MRSA',
-	'vancomycin-resistant E. faecalis ATCC 700802',
-	'vancomycin-resistant E. faecium ATCC 700221'
-]
 model_list = [torch.load(a_model, weights_only=False, map_location='cpu').eval() for a_model in glob.glob('./APEX_pathogen_models/APEX_*')]
-
 max_len = 52 #maximum seq length; 52 = start character + maximum peptide length (50 aa) + end character; longer peptides will be truncated
 word2idx, idx2word = make_vocab() #make amino acid vocabulary
 #emb, AAindex_dict = AAindex('./aaindex1.csv', word2idx) #make amino acid embeddings
 
-def predict(seqs):
-	seq_list = np.array(seqs)
-	seq_rep = onehot_encoding(seq_list, max_len, word2idx)  # make input
-	X_seq = torch.LongTensor(seq_rep)
+def predict(seq):
+	seq = np.array([seq])
+	X_seq = torch.LongTensor(onehot_encoding(seq, max_len, word2idx) )
 
 	#Use pretrained APEX models to predict species-specific antimicrobial activity (i.e., minimum inhibitory concentration [MIC]; unit: uM)
 	#8 pretrained APEX models are provided, and predictions are averaged
@@ -38,12 +26,128 @@ def predict(seqs):
 		AMP_pred = 10 ** (6 - AMP_pred)  # transform back to MICs
 		all_preds.append(AMP_pred)
 
-	# Stack predictions: shape (n_models, n_pathogens)
-	all_preds_array = np.vstack(all_preds)  # shape: (n_models, n_pathogens)
+	return np.mean(all_preds)
 
-	# Add mean row at the end
-	mean_pred = np.mean(all_preds_array, axis=0)
-	# all_rows = np.vstack([all_preds_array, mean_pred[np.newaxis, :]])
-	return mean_pred
+def read_fasta(path):
+    records_raw = list(SeqIO.parse(path, "fasta"))
+    return [str(x.seq) for x in records_raw]
 
-print(predict(["KRGFGKKLRKRLKKFRNSIKKRLKNFNVVIPIPLPG", "KRGFGKKLRKRLKKFRNSIKKRLKNFNVVIPIPLPG"]))
+fasta_files = {
+    "ampgan": "../../genbio/ampgan_sequences.fasta",
+    "pepcvae": "../../genbio/pepcvae_sequences.fasta",
+    "hydramp": "../../genbio/hydramp_sequences.fasta",
+    "dit_amp": "../../genbio/dit_amp_sequences.fasta",
+    "ampdiffusion": "../../genbio/ampdiffusion_sequences.fasta",
+}
+
+MODEL_ORDER = [
+    "dit_amp",
+    "ampgan",
+    "pepcvae",
+    "hydramp",
+    "ampdiffusion",
+]
+
+
+def write_per_file_csv(output_csv, rows):
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    with output_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["sequence", "apex_mic"])
+        writer.writerows(rows)
+
+
+def write_summary_csv(path, summary_rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["dataset", "n_sequences", "apex_mic_mean", "apex_mic_std"])
+        writer.writerows(summary_rows)
+
+
+def plot_summary(path, labels, mic_means, mic_stds):
+    x = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    ax.bar(
+        x,
+        mic_means,
+        yerr=mic_stds,
+        capsize=4,
+        color="#4C78A8",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=10)
+    ax.set_ylabel("Predicted MIC (uM)")
+    ax.set_title("APEX predicted MIC mean +/- std across datasets")
+    ax.grid(axis="y", linestyle="--", alpha=0.4)
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=200)
+    plt.close(fig)
+
+
+def _sort_key(name):
+    try:
+        return MODEL_ORDER.index(name)
+    except ValueError:
+        return len(MODEL_ORDER)
+
+
+def main():
+    script_dir = Path(__file__).resolve().parent
+    out_dir = script_dir.parents[1] / "eval" / "apex_results"
+
+    summary_rows = []
+    labels = []
+    mic_means = []
+    mic_stds = []
+
+    for name in sorted(fasta_files.keys(), key=_sort_key):
+        fasta_file = fasta_files[name]
+        fasta_path = script_dir / fasta_file
+        sequences = read_fasta(str(fasta_path))
+
+        per_file_rows = []
+        mic_vals = []
+        skipped = 0
+
+        for seq in sequences:
+            try:
+                mic = float(predict(seq))
+                per_file_rows.append([seq, mic])
+                mic_vals.append(mic)
+            except Exception:
+                skipped += 1
+                continue
+
+        output_csv = out_dir / "{}_apex.csv".format(name)
+        write_per_file_csv(output_csv, per_file_rows)
+
+        mic_vals = np.array(mic_vals, dtype=float)
+        if mic_vals.size == 0:
+            mic_mean = float("nan")
+            mic_std = float("nan")
+        else:
+            mic_mean = float(np.mean(mic_vals))
+            mic_std = float(np.std(mic_vals))
+
+        n_scored = int(mic_vals.size)
+        summary_rows.append([name, n_scored, mic_mean, mic_std])
+        labels.append(name)
+        mic_means.append(mic_mean)
+        mic_stds.append(mic_std)
+
+        print("{}: total={}, scored={}, skipped={}".format(name, len(sequences), n_scored, skipped))
+        print("  apex_mic_mean={:.6f}, apex_mic_std={:.6f}".format(mic_mean, mic_std))
+        print("  wrote {}".format(output_csv))
+
+    summary_csv = out_dir / "apex_summary.csv"
+    write_summary_csv(summary_csv, summary_rows)
+    print("Wrote summary: {}".format(summary_csv))
+
+    plot_path = out_dir / "apex_mean_std_plot.png"
+    plot_summary(plot_path, labels, mic_means, mic_stds)
+    print("Wrote plot: {}".format(plot_path))
+
+if __name__ == "__main__":
+    main()
