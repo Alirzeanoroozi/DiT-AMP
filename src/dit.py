@@ -32,45 +32,15 @@ class TimestepEmbedder(nn.Module):
         return embedding
 
     def forward(self, t):
-        t_freq = self.timestep_embedding(t, self.frequency_embedding_size).to(
-            dtype=next(self.parameters()).dtype
-        )
+        t_freq = self.timestep_embedding(t, self.frequency_embedding_size).to(dtype=next(self.parameters()).dtype)
         t_emb = self.mlp(t_freq)
         return t_emb
-
-class LabelEmbedder(nn.Module):
-    def __init__(self, num_classes, hidden_size, dropout_prob):
-        super().__init__()
-        use_cfg_embedding = int(dropout_prob > 0)
-        self.embedding_table = nn.Embedding(
-            num_classes + use_cfg_embedding, hidden_size
-        )
-        self.num_classes = num_classes
-        self.dropout_prob = dropout_prob
-
-    def token_drop(self, labels, force_drop_ids=None):
-        if force_drop_ids is None:
-            drop_ids = torch.rand(labels.shape[0]) < self.dropout_prob
-            drop_ids = drop_ids.cuda()
-            drop_ids = drop_ids.to(labels.device)
-        else:
-            drop_ids = force_drop_ids == 1
-        labels = torch.where(drop_ids, self.num_classes, labels)
-        return labels
-
-    def forward(self, labels, train, force_drop_ids=None):
-        use_dropout = self.dropout_prob > 0
-        if (train and use_dropout) or (force_drop_ids is not None):
-            labels = self.token_drop(labels, force_drop_ids)
-        embeddings = self.embedding_table(labels)
-        return embeddings
 
 class Attention(nn.Module):
     def __init__(self, dim, n_heads):
         super().__init__()
 
         self.n_heads = n_heads
-        self.n_rep = 1
         self.head_dim = dim // n_heads
 
         self.wq = nn.Linear(dim, n_heads * self.head_dim, bias=False)
@@ -125,12 +95,8 @@ class Attention(nn.Module):
         return self.wo(output)
 
 class FeedForward(nn.Module):
-    def __init__(self, dim, hidden_dim, multiple_of, ffn_dim_multiplier=None):
+    def __init__(self, dim, hidden_dim):
         super().__init__()
-        hidden_dim = int(2 * hidden_dim / 3)
-        if ffn_dim_multiplier:
-            hidden_dim = int(ffn_dim_multiplier * hidden_dim)
-        hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
         self.w1 = nn.Linear(dim, hidden_dim, bias=False)
         self.w2 = nn.Linear(hidden_dim, dim, bias=False)
@@ -143,46 +109,23 @@ class FeedForward(nn.Module):
         return self.w2(self._forward_silu_gating(self.w1(x), self.w3(x)))
 
 class TransformerBlock(nn.Module):
-    def __init__(
-        self,
-        layer_id,
-        dim,
-        n_heads,
-        multiple_of,
-        ffn_dim_multiplier,
-        norm_eps,
-    ):
+    def __init__(self, dim, n_heads, norm_eps=1e-5):
         super().__init__()
         self.dim = dim
         self.head_dim = dim // n_heads
         self.attention = Attention(dim, n_heads)
-        self.feed_forward = FeedForward(
-            dim=dim,
-            hidden_dim=4 * dim,
-            multiple_of=multiple_of,
-            ffn_dim_multiplier=ffn_dim_multiplier,
-        )
-        self.layer_id = layer_id
+        self.feed_forward = FeedForward(dim=dim, hidden_dim=4 * dim)
         self.attention_norm = nn.LayerNorm(dim, eps=norm_eps)
         self.ffn_norm = nn.LayerNorm(dim, eps=norm_eps)
 
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(min(dim, 1024), 6 * dim, bias=True),
-        )
+        self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(min(dim, 1024), 6 * dim, bias=True))
 
     def forward(self, x, freqs_cis, adaln_input=None):
         if adaln_input is not None:
-            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-                self.adaLN_modulation(adaln_input).chunk(6, dim=1)
-            )
+            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (self.adaLN_modulation(adaln_input).chunk(6, dim=1))
 
-            x = x + gate_msa.unsqueeze(1) * self.attention(
-                modulate(self.attention_norm(x), shift_msa, scale_msa), freqs_cis
-            )
-            x = x + gate_mlp.unsqueeze(1) * self.feed_forward(
-                modulate(self.ffn_norm(x), shift_mlp, scale_mlp)
-            )
+            x = x + gate_msa.unsqueeze(1) * self.attention(modulate(self.attention_norm(x), shift_msa, scale_msa), freqs_cis)
+            x = x + gate_mlp.unsqueeze(1) * self.feed_forward(modulate(self.ffn_norm(x), shift_mlp, scale_mlp))
         else:
             x = x + self.attention(self.attention_norm(x), freqs_cis)
             x = x + self.feed_forward(self.ffn_norm(x))
@@ -193,14 +136,9 @@ class FinalLayer(nn.Module):
     def __init__(self, hidden_size, patch_size, out_channels):
         super().__init__()
         self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.linear = nn.Linear(
-            hidden_size, patch_size * patch_size * out_channels, bias=True
-        )
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(min(hidden_size, 1024), 2 * hidden_size, bias=True),
-        )
-        # # init zero
+        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
+        self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(min(hidden_size, 1024), 2 * hidden_size, bias=True))
+        # init weights to zero
         nn.init.constant_(self.linear.weight, 0)
         nn.init.constant_(self.linear.bias, 0)
 
@@ -211,16 +149,7 @@ class FinalLayer(nn.Module):
         return x
 
 class DDiT_Llama(nn.Module):
-    def __init__(
-        self,
-        N=256,
-        dim=512,
-        n_layers=5,
-        n_heads=16,
-        multiple_of=256,
-        ffn_dim_multiplier=None,
-        norm_eps=1e-5,
-    ):
+    def __init__(self, N, dim, n_layers, n_heads):
         super().__init__()
         self.N = N
         self.out_channel = N
@@ -228,24 +157,11 @@ class DDiT_Llama(nn.Module):
         self.embedder = nn.Embedding(N, dim)
         self.t_embedder = TimestepEmbedder(dim)
         self.cond_embedder = nn.Linear(2, dim) # 2 is the dimension of the condition
-        self.layers = nn.ModuleList(
-            [
-                TransformerBlock(
-                    layer_id,
-                    dim,
-                    n_heads,
-                    multiple_of,
-                    ffn_dim_multiplier,
-                    norm_eps,
-                )
-                for layer_id in range(n_layers)
-            ]
-        )
+        self.layers = nn.ModuleList([TransformerBlock(dim, n_heads) for _ in range(n_layers)])
         self.final_layer = FinalLayer(dim, 1, self.out_channel)
-        self.freqs_cis = DDiT_Llama.precompute_freqs_cis(dim // n_heads, 4096)
+        self.freqs_cis = self.precompute_freqs_cis(dim // n_heads, 4096)
 
-    @staticmethod
-    def precompute_freqs_cis(dim, end, theta=10000.0):
+    def precompute_freqs_cis(self, dim, end, theta=10000.0):
         freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
         t = torch.arange(end)
         freqs = torch.outer(t, freqs).float()
@@ -259,29 +175,6 @@ class DDiT_Llama(nn.Module):
         adaln_input = self.t_embedder(t)
 
         if cond is not None:
-            # # Accept scalar/1D/2D condition and map to AdaLN embedding space.
-            # if not torch.is_tensor(cond):
-            #     cond = torch.tensor(cond, device=x.device, dtype=adaln_input.dtype)
-            # else:
-            #     cond = cond.to(device=x.device, dtype=adaln_input.dtype)
-            # if cond.dim() == 0:
-            #     cond = cond.view(1, 1).repeat(x.shape[0], 1)
-            # elif cond.dim() == 1:
-            #     if cond.shape[0] == x.shape[0]:
-            #         cond = cond.unsqueeze(-1)
-            #     elif cond.shape[0] == 1:
-            #         cond = cond.view(1, 1).repeat(x.shape[0], 1)
-            #     else:
-            #         raise ValueError(f"Invalid cond shape {cond.shape} for batch size {x.shape[0]}")
-            # elif cond.dim() == 2:
-            #     if cond.shape[0] == 1:
-            #         cond = cond.repeat(x.shape[0], 1)
-            #     elif cond.shape[0] != x.shape[0]:
-            #         raise ValueError(f"Invalid cond shape {cond.shape} for batch size {x.shape[0]}")
-            # else:
-            #     raise ValueError(f"Condition must be scalar, [B], or [B, C], got shape {cond.shape}")
-
-            # cond = cond.mean(dim=-1, keepdim=True)
             cond = cond.to(device=x.device, dtype=adaln_input.dtype)
             adaln_input = adaln_input + self.cond_embedder(cond)
 

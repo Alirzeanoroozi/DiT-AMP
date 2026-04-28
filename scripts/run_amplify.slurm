@@ -15,10 +15,18 @@ CONDA_BASE=$(conda info --base)
 source ${CONDA_BASE}/bin/activate amplify
 export LD_LIBRARY_PATH=${CONDA_BASE}/lib
 
-AMPlify -s genbio/ampgan_sequences.fasta
-AMPlify -s genbio/pepcvae_sequences.fasta
+echo "Running AMPlify"
 
-# shopt -s nullglob
-# for f in genbio/*.{fa,fasta}; do
-#   AMPlify -s "$f"
-# done
+config="lr2e-04_wd0p01_hlc0p001_d512_l6_h8"
+mkdir -p samples/results/$config
+
+# AMPlify -s samples/sampled_amps_$config.fasta -od samples/results/$config
+
+echo "Evaluating AMPlify results"
+python src/eval_summary.py --name $config
+
+echo "Switching to comp env for MACREL summary"
+source ${CONDA_BASE}/bin/activate comp
+export LD_LIBRARY_PATH=${CONDA_BASE}/lib
+
+python src/eval_macrel_summary.py --name $config

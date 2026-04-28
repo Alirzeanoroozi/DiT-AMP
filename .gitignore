@@ -1,3 +1,5 @@
 wandb/
 ckpt/
 logs/
+*.pyc
+__pycache__/

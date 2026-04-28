@@ -1,0 +1,2 @@
+name,Probability_score_mean,AMPlify_log_scaled_score_mean,macrel_amp_mean,macrel_hemo_mean,apex_mic_mean
+lr2e-04_wd0p01_hlc0p001_d512_l6_h8,0.9212723465625,27.031634375,0.7155528198927641,0.870977733284235,294.6895751953125

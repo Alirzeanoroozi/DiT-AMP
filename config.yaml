@@ -1,17 +1,21 @@
-mode: "sample"  # "train" or "sample"
+mode: "sample"  # "train" or "sample" or "eval"
 N: 28 # amino acid alphabet size
-max_length: 30
-device: "cuda:0"
+n_T: 1000
 
-output_path: "sampled_amps_1000.fasta"
-num_samples: 1000
+# Data
+data_path: "data/data.fasta"
 batch_size: 128
+max_length: 30
+
+# Training
+device: "cuda:0"
+num_samples: 1000
 num_train_epochs: 50
 eval_every: 900
-lr: 2e-4
-save_dir: "ckpt_amp"
-checkpoint_path: "ckpt_amp/d3pm_amp.pth"
-wandb_project: "d3pm_amp"
+lr: 5e-4
+weight_decay: 0.01
 hybrid_loss_coeff: 0.001
-n_T: 1000
-data_path: "data/data.fasta"
+# Model
+dim: 512
+n_layers: 4
+n_heads: 8

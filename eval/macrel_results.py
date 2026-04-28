@@ -16,6 +16,7 @@ fasta_files = {
     "pepcvae": "../genbio/pepcvae_sequences.fasta",
     "hydramp": "../genbio/hydramp_sequences.fasta",
     "dit_amp": "../genbio/dit_amp_sequences.fasta",
+    "ampdiffusion": "../genbio/ampdiffusion_sequences.fasta",
 }
 
 def read_fasta(path):
